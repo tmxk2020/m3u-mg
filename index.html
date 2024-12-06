@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U 配置管理器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #0078d7;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .container {
+            margin: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section h3 {
+            margin-bottom: 10px;
+        }
+        input[type="text"], input[type="file"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #005bb5;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        table th {
+            background-color: #f4f4f4;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>M3U 配置管理器</h1>
+    </header>
+    <div class="container">
+        <!-- 上传 M3U 文件 -->
+        <div class="section">
+            <h3>上传 M3U 文件</h3>
+            <input type="file" id="m3uFile" accept=".m3u">
+            <button onclick="handleFileUpload()">上传</button>
+        </div>
+
+        <!-- 添加 M3U URL -->
+        <div class="section">
+            <h3>添加 M3U URL</h3>
+            <input type="text" id="m3uUrl" placeholder="输入 M3U URL">
+            <button onclick="addUrl()">添加 URL</button>
+        </div>
+
+        <!-- 配置分组管理 -->
+        <div class="section">
+            <h3>分组与规则管理</h3>
+            <button onclick="addGroup()">新增分组</button>
+            <div id="groups">
+                <!-- 动态生成分组 -->
+            </div>
+        </div>
+
+        <!-- 输出链接 -->
+        <div class="section">
+            <h3>生成的订阅链接</h3>
+            <button onclick="generateLinks()">生成链接</button>
+            <ul id="outputLinks">
+                <!-- 动态生成链接 -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const groups = [
+            { name: "4K8K", rules: ["CCTV4K", "4K", "8K"] },
+            { name: "央视频道", rules: ["CCTV", "CGTN", "央视数字"] },
+            { name: "卫视频道", rules: ["卫视"] },
+            { name: "地方频道", rules: ["地方"] },
+            { name: "数字频道", rules: ["教育", "求索", "NewTV", "iHOT", "SiTV"] }
+        ];
+
+        // 页面加载时初始化默认分组
+        document.addEventListener('DOMContentLoaded', renderGroups);
+
+        // 新增分组
+        function addGroup() {
+            const groupName = prompt("输入分组名称：");
+            if (!groupName) return;
+
+            const group = {
+                name: groupName,
+                rules: []
+            };
+
+            groups.push(group);
+            renderGroups();
+        }
+
+        // 渲染分组
+        function renderGroups() {
+            const groupContainer = document.getElementById('groups');
+            groupContainer.innerHTML = '';
+
+            groups.forEach((group, index) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'group';
+
+                const title = document.createElement('h4');
+                title.textContent = group.name;
+
+                const addRuleButton = document.createElement('button');
+                addRuleButton.textContent = '新增规则';
+                addRuleButton.onclick = () => addRule(index);
+
+                const ruleList = document.createElement('ul');
+                group.rules.forEach((rule, ruleIndex) => {
+                    const ruleItem = document.createElement('li');
+                    ruleItem.textContent = rule;
+
+                    const deleteRuleButton = document.createElement('button');
+                    deleteRuleButton.textContent = '删除';
+                    deleteRuleButton.onclick = () => {
+                        group.rules.splice(ruleIndex, 1);
+                        renderGroups();
+                    };
+
+                    ruleItem.appendChild(deleteRuleButton);
+                    ruleList.appendChild(ruleItem);
+                });
+
+                groupDiv.appendChild(title);
+                groupDiv.appendChild(addRuleButton);
+                groupDiv.appendChild(ruleList);
+                groupContainer.appendChild(groupDiv);
+            });
+        }
+
+        // 新增规则
+        function addRule(groupIndex) {
+            const rule = prompt("输入规则（例如匹配频道名称的关键字）：");
+            if (!rule) return;
+
+            groups[groupIndex].rules.push(rule);
+            renderGroups();
+        }
+
+        // 处理 M3U 文件上传
+        function handleFileUpload() {
+            const fileInput = document.getElementById('m3uFile');
+            if (!fileInput.files[0]) {
+                alert('请先选择文件。');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                processM3U(event.target.result);
+            };
+            reader.readAsText(fileInput.files[0]);
+        }
+
+        // 处理 M3U 文件内容
+        function processM3U(content) {
+            const lines = content.split('\n');
+            lines.forEach(line => {
+                if (line.startsWith('#EXTINF')) {
+                    const channelName = line.split(',')[1]?.trim();
+                    if (channelName) {
+                        assignToGroup(channelName);
+                    }
+                }
+            });
+        }
+
+        // 将频道分配到分组
+        function assignToGroup(channelName) {
+            groups.forEach(group => {
+                group.rules.forEach(rule => {
+                    if (channelName.includes(rule)) {
+                        console.log(`频道 ${channelName} 已分配到分组 ${group.name}`);
+                    }
+                });
+            });
+        }
+
+        // 添加 M3U URL
+        function addUrl() {
+            const urlInput = document.getElementById('m3uUrl');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                alert('请输入有效的 URL。');
+                return;
+            }
+
+            // 示例逻辑：处理 URL
+            console.log("添加的 URL:", url);
+
+            urlInput.value = '';
+        }
+
+        // 生成订阅链接
+        function generateLinks() {
+            const outputLinks = document.getElementById('outputLinks');
+            outputLinks.innerHTML = '';
+
+            groups.forEach(group => {
+                const linkItem = document.createElement('li');
+                linkItem.textContent = `${group.name} - ${group.rules.length} 条规则`;
+                outputLinks.appendChild(linkItem);
+            });
+        }
+    </script>
+</body>
+</html>
